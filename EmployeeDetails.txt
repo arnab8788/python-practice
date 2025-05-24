@@ -1,91 +1,153 @@
-EmployeeID|EmployeeName
-380092|Employee 1
-380093|Employee 2
-380094|Employee 3
-380095|Employee 4
-380096|Employee 5
-380097|Employee 6
-380098|Employee 7
-380099|Employee 8
-380100|Employee 9
-380101|Employee 10
-380102|Employee 11
-380103|Employee 12
-380104|Employee 13
-380105|Employee 14
-380106|Employee 15
-380107|Employee 16
-380108|Employee 17
-380109|Employee 18
-380110|Employee 19
-380111|Employee 20
-380112|Employee 21
-380113|Employee 22
-380114|Employee 23
-380115|Employee 24
-380116|Employee 25
-380117|Employee 26
-380118|Employee 27
-380119|Employee 28
-380120|Employee 29
-380121|Employee 30
-380122|Employee 31
-380123|Employee 32
-380124|Employee 33
-380125|Employee 34
-380126|Employee 35
-380127|Employee 36
-380128|Employee 37
-380129|Employee 38
-380130|Employee 39
-380131|Employee 40
-380132|Employee 41
-380133|Employee 42
-380134|Employee 43
-380135|Employee 44
-380136|Employee 45
-380137|Employee 46
-380138|Employee 47
-380139|Employee 48
-380140|Employee 49
-380141|Employee 50
-380142|Employee 51
-380143|Employee 52
-380144|Employee 53
-380145|Employee 54
-380146|Employee 55
-380147|Employee 56
-380148|Employee 57
-380149|Employee 58
-380150|Employee 59
-380151|Employee 60
-380152|Employee 61
-380153|Employee 62
-380154|Employee 63
-380155|Employee 64
-380156|Employee 65
-380157|Employee 66
-380158|Employee 67
-380159|Employee 68
-380160|Employee 69
-380161|Employee 70
-380162|Employee 71
-380163|Employee 72
-380164|Employee 73
-380165|Employee 74
-380166|Employee 75
-380167|Employee 76
-380168|Employee 77
-380169|Employee 78
-380170|Employee 79
-380171|Employee 80
-380172|Employee 81
-380173|Employee 82
-380174|Employee 83
-380175|Employee 84
-380176|Employee 85
-380177|Employee 86
-380178|Employee 87
-380179|Employee 88
-380180|Employee 89
-380181|Employee 90
+I am currently working on DB2 to SQL Server conversion. Many conversions I have handled with Regular Expressions.
+But below are the cases where I am stuck with conversion process.
+To_CHAR(), TO_DATE() and DATEFIELD + N DAYS or DATEFIELD + N MONTHS or DATEFIELD - N DAYS or SYSDATE + 10 days etc.
+
+So I want you to create me a generic python script that will be able to convert above three functions in DB2 to SQL Server version with the below criterias:
+
+The SQL query can be of single line or multiple lines.
+The SQL Query can have comment statements that needs to be removed - commenst canbe declared in "--" or sarting with /* and ending with */
+The above functions can be splitted in multiple lines.
+The above functions can be part of the nested functions, like under one or more functions.
+The above functions can be part of the same functions, i.e., TO_DATE() is used inside another TO_DATE() or TO_CHAR() is used inside another TO_CHAR()
+Both TO_DATE and TO_CHAR should be able to handle all the system defined date or time or datetime variables like, SYSDATE, CURRENT_TIMESTAMP, NOW, NOW(), etc. - considering all available for DB2
+In DB2 TO_DATE can be defined with different formats like MM/DD/YYYY, YYYYMMDD, DD-MM-YYYY, YYYY-MM-DD HH24:MI:SS, basically considering all the posibilities.
+In DB2 TO_CHAR can also be defined with different formats like MM/DD/YYYY, YYYYMMDD, DD-MM-YYYY, YYYY-MM-DD HH24:MI:SS, basically considering all the posibilities.
+One of the main thing that needs to be handled is these TO_DATE() and TO_CHAR() functions can be available in the query many different ways - sharing few examples:
+TO_DATE(TO_CHAR() - basically TO_CHAR() inside to_DATE()
+TO_CHAR(TO_DATE() - basically TO_DATE() inside TO_CHAR()
+TO_CHAR(TO_DATE(TO_CHAR() - To_CHAR() Inside TO_DATE(), which is again inside To_CHAR()
+TO_DATE(TO_CHAR(TO_DATE() - TO_DATE() Inside TO_CHAR(), which is again inside TO_DATE()
+Some other functions can also have TO_DATE and TO_CHAR inside them
+CASE Statements can also have these inside them
+basically the boundary is generic and the nested level is also unbounded or generic.
+
+I need a generic full proof python script to handle the DB2 conversion of these TO_DATE() and TO_CHAR() function along with the conversion of Date Field +/- N Days/Months/Hours/Years
+
+I also need the script to maintain an individual dictionary for the date time or datetime format conversion from DB2 to SQL Server
+
+Need to keep in mind that the conversion must be case insesnsitive.
+
+Providing one or two complex sample queries for your reference. But the script must be able to handle more comples scenarios than this.
+
+Sample Query 1:
+
+SELECT 
+	SPL.S_POLICY_LIFE_LOW_TT_SEQ_NUM,
+	SPL.POLICY_NUM, 
+	SPL.PLC,
+	SPL.LOAD_SRC, 
+	SPL.TAMRA_LAST_MTRL_CHG_DT , 
+	SPM.LAST_ANNIV_DT, 
+	SPH.LAST_MONTHIVERSARY_DATE, 
+	CASE 
+		WHEN REF.REF_CATEGORY_CD Like '%UNIVERSAL%' -- FOR UL and VUL
+		THEN 	
+			to_char(    max (
+								nvl(spl.TAMRA_LAST_MTRL_CHG_DT,TO_DATE('18000101','YYYYMMDD')) , 
+								nvl(spm.LAST_ANNIV_DT, TO_DATE('18000101','YYYYMMDD')) , 
+								nvl(sph.LAST_MONTHIVERSARY_DATE, TO_DATE('18000101','YYYYMMDD')) 
+								)        
+						, 'YYYYMMDD'
+						) 
+		ELSE 	
+			to_char(    max (
+								nvl(spl.TAMRA_LAST_MTRL_CHG_DT,TO_DATE('18000101','YYYYMMDD')) , 
+								nvl(spm.LAST_ANNIV_DT, TO_DATE('18000101','YYYYMMDD')) -- , 
+							--	nvl(sph.LAST_MONTHIVERSARY_DATE, TO_DATE('18000101','YYYYMMDD'))   -- Monthiversary Not needed for TERM and WHOLE LIFE
+								)        
+						, 'YYYYMMDD'
+						) 			
+		END as CALCULATED_VALUES_DATE
+--, to_char(    max ( nvl(spl.TAMRA_LAST_MTRL_CHG_DT,TO_DATE('18000101','YYYYMMDD')) , spm.LAST_ANNIV_DT, sph.LAST_MONTHIVERSARY_DATE)        , 'YYYYMM') as calculated_values_date_for_feed 
+-- ,spl.VALUES_DATE
+
+FROM $$OWNNM_TGT.S_POLICY_LIFE_LOW_TT SPL 
+INNER JOIN $$OWNNM_TGT.S_POLICY_LIFE_MED_TT SPM ON SPL.POLICY_NUM = SPM.POLICY_NUM AND SPL.PLC = SPM.PLC
+INNER JOIN $$OWNNM_TGT.S_POLICY_LIFE_HI_TT SPH ON SPL.POLICY_NUM = SPH.POLICY_NUM AND SPL.PLC = SPH.PLC
+INNER JOIN $$OWNNM_TGT.S_COVERAGE_LIFE_LOW_TT SCL ON SPL.POLICY_NUM = SCL.POLICY_NUM AND SPL.PLC = SCL.PLC AND SCL.VPAS_COV_ID = '001'
+LEFT JOIN  $$OWNNM_TGT.REF_LOOKUP REF ON SCL.PLAN_CODE = REF.REF_VALUE_CD AND REF.REF_SRC_CD = '2V' AND REF_TYPE_CD = 'PRODUCT_CODE'
+
+
+
+Sample Query 2:
+
+WITH HECR1 AS 
+(
+SELECT hi.HE_INSURED_SEQ_NUM,
+hi.HE_ID,
+hi.REF_POLICY_NUM,
+SUBSTR(TRUNC(COALESCE(hvsl.REWARD_STATUS_DATE,hi.VITALITY_COV_EFF_DT)),1,10) REWARD_STATUS_DATE,
+hvsl.REWARD_STATUS,
+hvsl.PROGRAM_YR_REWARD_STATUS as PRIOR_ANNV_YR_REWARD_STATUS,
+hvsl.PRIOR_YEAR_RETROACTIVE_STATUS,
+hvsl.TERMS_AND_CONDITIONS_IND,
+hvsl.LOAD_TS , 
+hvsl.END_TS , 
+hi.VITALITY_COV_EFF_DT,
+DENSE_RANK() over (partition by hi.HE_ID, COALESCE(hvsl.REWARD_STATUS_DATE,hi.VITALITY_COV_EFF_DT) ORDER BY hvsl.END_TS desc )  r
+FROM 
+(select HE_INSURED_SEQ_NUM , REWARD_STATUS , PROGRAM_YR_REWARD_STATUS, PRIOR_YEAR_RETROACTIVE_STATUS,  TERMS_AND_CONDITIONS_IND, 
+DATE(REWARD_STATUS_DATE) as REWARD_STATUS_DATE, LOAD_TS, END_TS
+from $$SCHEMA_VLT.HE_VITALITY_STATUS_LOW) hvsl 
+INNER JOIN  
+	(
+	SELECT HE_INSURED_SEQ_NUM, HE_ID, REF_POLICY_NUM, VITALITY_COV_EFF_DT, 
+	TO_DATE(CONCAT(
+	INS.LAST_VITALITY_COV_ANNIV_YR ,
+	CASE WHEN INS.VITALITY_COV_EFF_DT_mmdd = '0229' 
+		THEN 
+			CASE WHEN INS.LAST_VITALITY_COV_ANNIV_YR%4= 0 
+				THEN 
+					CASE WHEN INS.LAST_VITALITY_COV_ANNIV_YR%100 = 0
+						THEN 
+							CASE WHEN INS.LAST_VITALITY_COV_ANNIV_YR%400= 0 
+								THEN '0229' --Leap year
+								ELSE '0301' --Not a Leap year 
+							END
+						ELSE '0229' --Leap year 
+					END
+				ELSE '0301' --Not a Leap year
+			END
+		ELSE INS.VITALITY_COV_EFF_DT_mmdd
+	END 
+	),'YYYYMMDD') as LAST_VITALITY_COV_ANNIV_DT  
+	FROM 
+	(SELECT HE_INSURED_SEQ_NUM, HE_ID, REF_POLICY_NUM, VITALITY_COV_EFF_DT , 
+	SUBSTR(VARCHAR_FORMAT(VITALITY_COV_EFF_DT, 'YYYYMMDD'),5,4) as VITALITY_COV_EFF_DT_mmdd,
+	INTEGER(
+	CASE WHEN INTEGER(CONCAT(SUBSTR('$$JH_CYCLEDATE',1,2),SUBSTR('$$JH_CYCLEDATE',4,2))) >= INTEGER(SUBSTR(VARCHAR_FORMAT(VITALITY_COV_EFF_DT, 'YYYYMMDD'),5,4))
+		THEN INTEGER(SUBSTR('$$JH_CYCLEDATE',7,4))    
+		ELSE INTEGER(SUBSTR('$$JH_CYCLEDATE',7,4)) -1
+	END
+	) AS LAST_VITALITY_COV_ANNIV_YR
+	FROM $$SCHEMA_VLT.HE_INSURED) 	INS
+	)
+hi   
+on hi.HE_INSURED_SEQ_NUM = hvsl.HE_INSURED_SEQ_NUM  
+AND COALESCE(hvsl.REWARD_STATUS_DATE,hi.VITALITY_COV_EFF_DT) <= hi.LAST_VITALITY_COV_ANNIV_DT
+ORDER BY hvsl.END_TS DESC
+)
+,
+HECR2 AS 
+(
+SELECT HE_ID,
+HE_INSURED_SEQ_NUM,
+REF_POLICY_NUM,
+REWARD_STATUS_DATE,
+VITALITY_COV_EFF_DT,
+REWARD_STATUS,
+PRIOR_ANNV_YR_REWARD_STATUS,
+PRIOR_YEAR_RETROACTIVE_STATUS,
+TERMS_AND_CONDITIONS_IND,
+Lag(PRIOR_ANNV_YR_REWARD_STATUS) over (partition by HE_ID ORDER BY REWARD_STATUS_DATE)  PRIOR_PRIOR_ANNV_YR_REWARD_STATUS,
+DENSE_RANK() over (partition by HE_ID ORDER BY REWARD_STATUS_DATE desc)  rnk
+FROM HECR1 
+WHERE r=1
+)
+
+SELECT distinct  LTRIM(HE_ID), REF_POLICY_NUM, TO_CHAR(VITALITY_COV_EFF_DT,'YYYYMMDD') as VITALITY_COV_EFF_DT,TERMS_AND_CONDITIONS_IND,
+TO_CHAR(REWARD_STATUS_DATE,'YYYYMMDD') as REWARD_STATUS_DATE, -- REWARD_STATUS, PRIOR_YEAR_RETROACTIVE_STATUS, 
+PRIOR_ANNV_YR_REWARD_STATUS,PRIOR_PRIOR_ANNV_YR_REWARD_STATUS
+FROM HECR2
+WHERE rnk=1
+WITH UR
