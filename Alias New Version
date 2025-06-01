@@ -1,0 +1,71 @@
+import re
+
+def fix_sql_aliasing(sql: str) -> str:
+    """
+    Adds missing aliases to all subqueries that contain SELECT,
+    except for the top-level CTE declarations. Subqueries inside CTEs are processed.
+    """
+
+    alias_counter = 1
+    output = sql
+
+    # Step 1: Identify top-level CTE declaration ranges to skip aliasing them
+    cte_ranges = []
+    cte_pattern = re.compile(r"WITH\s+(.*?)\s+AS\s*\(", re.IGNORECASE | re.DOTALL)
+    for match in cte_pattern.finditer(output):
+        start = match.start()
+        stack = ['(']
+        i = match.end()
+        while i < len(output) and stack:
+            if output[i] == '(':
+                stack.append('(')
+            elif output[i] == ')':
+                stack.pop()
+            i += 1
+        cte_ranges.append((start, i))
+
+    def is_within_cte_top(pos):
+        return any(start <= pos <= end for start, end in cte_ranges)
+
+    # Step 2: Regex pattern to find subqueries missing aliases
+    pattern = re.compile(r"""
+        (?<![\w])                      # Not preceded by word character (avoid functions)
+        (\(                            # Group 1: match subquery
+        \s*select\b                    # Starts with SELECT
+        .*?                           # Subquery body (non-greedy)
+        \))                           # Closing parenthesis
+        (?!\s*(as\s+\w+|\w))           # Not followed by alias
+        (?=\s*(where|join|group|order|union|having|,|\)|$))  # Followed by clause or end
+    """, re.IGNORECASE | re.DOTALL | re.VERBOSE)
+
+    def replacer(match):
+        nonlocal alias_counter
+        start = match.start(1)
+        if is_within_cte_top(start):
+            return match.group(0)  # Don't alias top-level CTEs
+        subquery = match.group(1)
+        replacement = f"{subquery} as AutoAlias{alias_counter}"
+        alias_counter += 1
+        return replacement
+
+    # Apply replacements iteratively
+    prev_output = None
+    while prev_output != output:
+        prev_output = output
+        output = pattern.sub(replacer, output, count=1)
+
+    return output
+
+
+# ========== Example usage ==========
+
+if __name__ == "__main__":
+    with open("input.sql", "r", encoding="utf-8") as infile:
+        input_sql = infile.read()
+
+    output_sql = fix_sql_aliasing(input_sql)
+
+    with open("output.sql", "w", encoding="utf-8") as outfile:
+        outfile.write(output_sql)
+
+    print("✅ Missing subquery aliases added and written to output.sql")
