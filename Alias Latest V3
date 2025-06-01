@@ -1,0 +1,52 @@
+import re
+
+def add_aliases_to_subqueries_precise(sql: str) -> str:
+    alias_counter = 1
+    result = ""
+    index = 0
+
+    def find_matching_paren(s: str, start: int) -> int:
+        depth = 0
+        for i in range(start, len(s)):
+            if s[i] == '(':
+                depth += 1
+            elif s[i] == ')':
+                depth -= 1
+                if depth == 0:
+                    return i
+        return -1
+
+    def is_within_cte(start: int) -> bool:
+        before = sql[max(0, start - 100):start].upper()
+        return bool(re.search(r"\bWITH\s+[A-Z0-9_]+\s+AS\s*\($", before.strip(), re.IGNORECASE))
+
+    def has_alias(following_text: str) -> bool:
+        following_text = following_text.strip()
+        return bool(re.match(r"^(AS\s+)?[a-zA-Z_][\w]*", following_text, re.IGNORECASE))
+
+    while index < len(sql):
+        match = re.search(r"\(\s*SELECT\b", sql[index:], re.IGNORECASE)
+        if not match:
+            result += sql[index:]
+            break
+
+        start = index + match.start()
+        result += sql[index:start]
+        end = find_matching_paren(sql, start)
+
+        if end == -1:
+            result += sql[start:]
+            break
+
+        subquery = sql[start:end + 1]
+        following_index = end + 1
+        following_text = sql[following_index:following_index + 100]
+
+        if not is_within_cte(start) and not has_alias(following_text):
+            subquery += f" as AutoAlias{alias_counter}"
+            alias_counter += 1
+
+        result += subquery
+        index = end + 1
+
+    return result
