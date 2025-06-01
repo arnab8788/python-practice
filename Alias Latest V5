@@ -1,0 +1,55 @@
+import re
+
+def fix_sql_aliasing(sql: str) -> str:
+    """
+    Adds aliases to subqueries missing one, excluding:
+    - CTEs (Common Table Expressions)
+    - Function calls like TO_DATE(...)
+    """
+    alias_counter = 1
+    output = sql
+
+    # Track CTE ranges so we don't alias the top-level CTE subqueries
+    cte_ranges = []
+    cte_pattern = re.compile(r"WITH\s+(.*?)\s+AS\s*\(", re.IGNORECASE | re.DOTALL)
+    for match in cte_pattern.finditer(output):
+        start = match.start()
+        stack = ['(']
+        i = match.end()
+        while i < len(output) and stack:
+            if output[i] == '(':
+                stack.append('(')
+            elif output[i] == ')':
+                stack.pop()
+            i += 1
+        cte_ranges.append((start, i))
+
+    def is_within_cte(pos):
+        return any(start <= pos <= end for start, end in cte_ranges)
+
+    pattern = re.compile(r"""
+        (?<![\w])                # Not preceded by a word character (avoid functions)
+        (\(                      # Start of subquery
+        \s*select\b              # SELECT keyword
+        .*?                     # Non-greedy body
+        \))                     # Closing )
+        (?!\s*(as\s+\w+|\w))     # Not followed by alias
+        (?=\s*(where|join|group|order|union|having|,|\)|$))  # Followed by clause or end
+    """, re.IGNORECASE | re.DOTALL | re.VERBOSE)
+
+    def replacer(match):
+        nonlocal alias_counter
+        start = match.start(1)
+        if is_within_cte(start):
+            return match.group(0)  # skip aliasing
+        subquery = match.group(1)
+        return f"{subquery} as AutoAlias{alias_counter}"
+
+    prev_output = None
+    while prev_output != output:
+        prev_output = output
+        output = pattern.sub(replacer, output, count=1)
+        if prev_output != output:
+            alias_counter += 1
+
+    return output
