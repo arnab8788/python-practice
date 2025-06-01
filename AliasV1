@@ -1,0 +1,60 @@
+import re
+
+def add_alias_to_subqueries(sql: str) -> str:
+    alias_counter = 1
+    i = 0
+    length = len(sql)
+    result = ''
+
+    while i < length:
+        match = re.search(r'\b(from|join)\s*\(', sql[i:], re.IGNORECASE)
+        if not match:
+            result += sql[i:]
+            break
+
+        start = i + match.start()
+        keyword = match.group(1)
+        result += sql[i:start + len(keyword)]  # add 'from' or 'join'
+        i = start + len(keyword)
+
+        # Skip whitespace and copy
+        while i < length and sql[i].isspace():
+            result += sql[i]
+            i += 1
+
+        if i >= length or sql[i] != '(':
+            continue
+
+        # Track parentheses
+        sub_start = i
+        stack = ['(']
+        i += 1
+        while i < length and stack:
+            if sql[i] == '(':
+                stack.append('(')
+            elif sql[i] == ')':
+                stack.pop()
+            i += 1
+        sub_end = i
+
+        subquery = sql[sub_start:sub_end]
+        result += subquery
+
+        # Check what comes next (ignoring spaces and comments)
+        after_sub = sql[sub_end:]
+        alias_match = re.match(
+            r'''^[\s\n\r]*(--[^\n]*\n|/\*.*?\*/[\s\n\r]*)*         # skip comments
+                 ([\s\n\r]*(?i:as)?\s*[a-zA-Z_][a-zA-Z0-9_]*)     # alias
+              ''', after_sub, re.VERBOSE | re.DOTALL)
+
+        if not alias_match:
+            # Add alias only if not already present
+            result += f" auto_alias_{alias_counter}"
+            alias_counter += 1
+
+        i = sub_end
+        if alias_match:
+            result += alias_match.group(0)
+            i = sub_end + len(alias_match.group(0))
+
+    return result
