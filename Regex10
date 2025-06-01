@@ -1,0 +1,32 @@
+import re
+
+def alias_unaliased_subqueries(sql_query):
+    alias_counter = [1]
+
+    # Pattern to find FROM or JOIN followed by an unaliased subquery
+    pattern = re.compile(
+        r'''
+        (?P<clause>\bFROM\b|\bJOIN\b|,)         # Match FROM or JOIN
+        \s*                                     
+        (?P<subquery>
+            \(                                  # Start of subquery
+                (?:[^()]+|(?R))*                # Nested content
+            \)
+        )
+        (?P<after>
+            (?!\s*(AS\s+)?[a-zA-Z_][a-zA-Z0-9_]*\b)  # No alias should follow
+        )
+        (?=\s*(WHERE|GROUP BY|ORDER BY|ON|\)|,|$))   # Lookahead for ending condition
+        ''',
+        re.IGNORECASE | re.VERBOSE | re.DOTALL
+    )
+
+    def alias_replacer(match):
+        clause = match.group('clause')
+        subquery = match.group('subquery')
+        after = match.group('after')
+        alias = f" AS auto_alias_{alias_counter[0]}"
+        alias_counter[0] += 1
+        return f"{clause} {subquery}{alias}"
+
+    return pattern.sub(alias_replacer, sql_query)
