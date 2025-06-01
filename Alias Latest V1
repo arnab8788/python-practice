@@ -1,0 +1,74 @@
+import re
+
+def add_aliases_to_subqueries(sql: str) -> str:
+    """
+    Add aliases to subqueries in a DB2 SQL query if they are missing, for compatibility with SQL Server.
+    """
+
+    def is_alias_missing(subquery: str, following_text: str) -> bool:
+        """
+        Determines if an alias is missing after a subquery.
+        """
+        # Skip if the following text starts with a valid alias pattern
+        following_text = following_text.strip()
+        return not re.match(r"^(AS\s+)?[a-zA-Z_][\w]*", following_text, re.IGNORECASE)
+
+    def find_matching_paren(sql: str, start: int) -> int:
+        """
+        Given the position of an opening parenthesis, find the matching closing parenthesis.
+        """
+        depth = 0
+        for i in range(start, len(sql)):
+            if sql[i] == '(':
+                depth += 1
+            elif sql[i] == ')':
+                depth -= 1
+                if depth == 0:
+                    return i
+        return -1
+
+    alias_counter = 1
+    index = 0
+    result = ""
+
+    while index < len(sql):
+        match = re.search(r"\(\s*SELECT\b", sql[index:], re.IGNORECASE)
+        if not match:
+            result += sql[index:]
+            break
+
+        start = index + match.start()
+        result += sql[index:start]
+        end = find_matching_paren(sql, start)
+
+        if end == -1:
+            result += sql[start:]
+            break
+
+        subquery = sql[start:end+1]
+        following_text_start = end + 1
+        following_text_end = sql.find("\n", following_text_start)
+        if following_text_end == -1:
+            following_text_end = following_text_start + 100  # get a reasonable snippet
+        following_text = sql[following_text_start:following_text_end]
+
+        if is_alias_missing(subquery, following_text):
+            alias = f" _sub{alias_counter} "
+            alias_counter += 1
+            subquery += alias
+
+        result += subquery
+        index = end + 1
+
+    return result
+
+
+# Apply the transformation to the uploaded SQL content
+transformed_sql = add_aliases_to_subqueries(content)
+
+# Save result to a file
+output_path = "/mnt/data/Transformed_SQL_with_Aliases.sql"
+with open(output_path, "w") as f:
+    f.write(transformed_sql)
+
+output_path
