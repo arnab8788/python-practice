@@ -1,0 +1,62 @@
+import re
+
+def add_subquery_aliases(sql: str) -> str:
+    """
+    Adds required aliases to subqueries in DB2 SQL for conversion to SQL Server.
+    Only adds aliases to subqueries that are completely missing them.
+    """
+    # Improved pattern to identify subqueries that truly need aliases
+    subquery_pattern = re.compile(
+        r"""
+        (\(
+            (?:[^()]|(?R))*  # Match anything but parentheses, or recurse
+        \))
+        (?!\s*(?:AS\s+)?[a-zA-Z_][a-zA-Z0-9_]*)  # Negative lookahead for existing alias
+        (?=\s*(?:WHERE|GROUP\s+BY|HAVING|ORDER\s+BY|JOIN|,|\)|$))  # Lookahead for clause end
+        """,
+        re.IGNORECASE | re.VERBOSE | re.DOTALL
+    )
+    
+    # Track used aliases to avoid duplicates
+    used_aliases = set()
+    alias_counter = 1
+    
+    def process_match(match):
+        nonlocal alias_counter
+        
+        # Check if this is actually a SELECT subquery
+        subquery = match.group(1)
+        if not re.search(r'\bselect\b', subquery, re.IGNORECASE | re.DOTALL):
+            return match.group(0)
+        
+        # Generate a unique alias
+        while True:
+            alias = f"subq{alias_counter}"
+            alias_counter += 1
+            if alias not in used_aliases:
+                used_aliases.add(alias)
+                break
+        
+        # Return the subquery with alias
+        return f"{subquery} AS {alias}"
+    
+    # First, handle CTEs separately to avoid false positives
+    cte_pattern = re.compile(
+        r"""
+        (,\s*[a-zA-Z_][a-zA-Z0-9_]*\s+AS\s*\(  # CTE definition
+            (?:[^()]|(?R))*  # Match anything but parentheses, or recurse
+        \))
+        """,
+        re.IGNORECASE | re.VERBOSE | re.DOTALL
+    )
+    
+    def process_cte(match):
+        cte_content = match.group(0)
+        # Process subqueries within the CTE
+        return subquery_pattern.sub(process_match, cte_content)
+    
+    # Process CTEs first
+    sql = cte_pattern.sub(process_cte, sql)
+    
+    # Then process the rest of the query
+    return subquery_pattern.sub(process_match, sql)
