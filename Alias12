@@ -1,0 +1,40 @@
+import re
+
+def add_subquery_aliases(sql: str) -> str:
+    """
+    Adds required aliases to subqueries in DB2 SQL for conversion to SQL Server.
+    Specifically targets subqueries in FROM clauses that are immediately followed by WHERE/GROUP BY/HAVING.
+    """
+    # Pattern to find subqueries in FROM clauses that need aliases
+    from_subquery_pattern = re.compile(
+        r"""
+        (FROM\s*)             # FROM keyword
+        (\(                   # Opening parenthesis
+            (?:[^()]|(?R))*   # Subquery content
+        \))                   # Closing parenthesis
+        (\s*)                 # Optional whitespace
+        (WHERE|GROUP\s+BY|HAVING|ORDER\s+BY)  # Following clause
+        """,
+        re.IGNORECASE | re.VERBOSE | re.DOTALL
+    )
+    
+    # Track used aliases
+    used_aliases = set()
+    alias_counter = 1
+    
+    def process_match(match):
+        nonlocal alias_counter
+        
+        # Generate unique alias
+        while True:
+            alias = f"subq{alias_counter}"
+            alias_counter += 1
+            if alias not in used_aliases:
+                used_aliases.add(alias)
+                break
+        
+        # Reconstruct with alias
+        return f"{match.group(1)}{match.group(2)} AS {alias}{match.group(4)}{match.group(5)}"
+    
+    # Process the SQL
+    return from_subquery_pattern.sub(process_match, sql)
