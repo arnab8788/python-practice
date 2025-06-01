@@ -1,0 +1,51 @@
+import re
+
+def add_alias_to_subqueries(sql: str) -> str:
+    """
+    Adds aliases to subqueries that are missing them in a complex SQL statement.
+    Handles nested subqueries, CTEs, joins, and multiline formatting.
+    """
+    def remove_comments(query):
+        # Remove inline and block comments
+        query = re.sub(r'--.*?$', '', query, flags=re.MULTILINE)
+        query = re.sub(r'/\*.*?\*/', '', query, flags=re.DOTALL)
+        return query
+
+    def find_subqueries(query):
+        stack = []
+        subqueries = []
+        for i, char in enumerate(query):
+            if char == '(':
+                stack.append(i)
+            elif char == ')':
+                if stack:
+                    start = stack.pop()
+                    content = query[start + 1:i].strip()
+                    # Check if the content is a SELECT statement (ignoring leading comments/whitespace)
+                    if re.match(r"^select\b", content, re.IGNORECASE):
+                        subqueries.append((start, i))
+        return subqueries
+
+    def has_alias_after(index, query):
+        after = query[index+1:].lstrip()
+        # Check if 'AS alias' or alias directly follows the closing parenthesis
+        return bool(re.match(r'^(as\s+\w+|\w+)', after, re.IGNORECASE))
+
+    def insert_aliases(query, subqueries):
+        added = 0
+        used_aliases = set()
+        for start, end in sorted(subqueries, key=lambda x: x[0], reverse=True):
+            insert_pos = end + added
+            if not has_alias_after(insert_pos, query):
+                alias = f"auto_alias_{len(used_aliases)+1}"
+                while alias in used_aliases:
+                    alias = f"auto_alias_{len(used_aliases)+1}"
+                used_aliases.add(alias)
+                query = query[:insert_pos + 1] + f' {alias}' + query[insert_pos + 1:]
+                added += len(f' {alias}')
+        return query
+
+    clean_sql = remove_comments(sql)
+    subqueries = find_subqueries(clean_sql)
+    updated_sql = insert_aliases(sql, subqueries)
+    return updated_sql
