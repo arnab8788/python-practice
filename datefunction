@@ -1,0 +1,25 @@
+import re
+
+def convert_db2_date_to_sqlserver(sql):
+    pattern = re.compile(
+        r'\bDATE\s*\(\s*((?:[^()]+|\([^()]*\))*)\s*\)',
+        re.IGNORECASE | re.DOTALL
+    )
+    return pattern.sub(r'CAST(\1 AS DATE)', sql)
+
+# Example SQL
+query = """
+SELECT * FROM table WHERE DATE(field) = '2023-01-01';
+SELECT DATE(UPPER(TRIM(field))) FROM table;
+SELECT TO_DATE(DATE(SUBSTR(field, 1, 10)), 'YYYY-MM-DD') FROM table;
+SELECT
+  DATE(
+    UPPER(
+      alias.field
+    )
+  ) AS formatted_date
+FROM table;
+"""
+
+converted = convert_db2_date_to_sqlserver(query)
+print(converted)
