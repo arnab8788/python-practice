@@ -1,0 +1,62 @@
+import re
+
+def add_aliases_after_balanced_from_blocks(sql: str) -> str:
+    alias_counter = 1
+    output = sql
+    i = 0
+
+    while i < len(output):
+        # Match 'from' followed by spaces/newlines and then a '('
+        match = re.search(r'\bfrom\s*\(\s*', output[i:], re.IGNORECASE)
+        if not match:
+            break
+
+        start = i + match.start()
+        paren_start = output.find('(', start)
+        stack = ['(']
+        j = paren_start + 1
+
+        # Walk through and find the matching closing ')'
+        while j < len(output) and stack:
+            if output[j] == '(':
+                stack.append('(')
+            elif output[j] == ')':
+                stack.pop()
+            j += 1
+
+        if not stack:
+            closing_paren_pos = j - 1
+            after_text = output[closing_paren_pos + 1:]
+
+            # Get up to the next ')' or end of SQL
+            next_paren = after_text.find(')')
+            segment_end = next_paren if next_paren != -1 else len(after_text)
+            between = after_text[:segment_end].strip()
+
+            # Count words between ')' and next ')'
+            words = re.findall(r'\b\w+\b', between)
+
+            if not (1 <= len(words) <= 2):
+                alias = f" Alias{alias_counter}"
+                output = output[:closing_paren_pos + 1] + alias + output[closing_paren_pos + 1:]
+                alias_counter += 1
+                i = closing_paren_pos + len(alias)
+            else:
+                i = closing_paren_pos + 1
+        else:
+            i = start + 5  # Skip ahead if no match
+
+    return output
+
+
+# Example usage
+if __name__ == "__main__":
+    with open("input.sql", "r", encoding="utf-8") as infile:
+        sql = infile.read()
+
+    fixed_sql = add_aliases_after_balanced_from_blocks(sql)
+
+    with open("output.sql", "w", encoding="utf-8") as outfile:
+        outfile.write(fixed_sql)
+
+    print("✅ Alias insertion complete. Check output.sql.")
