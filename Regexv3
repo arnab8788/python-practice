@@ -1,0 +1,46 @@
+import re
+
+def add_aliases_to_derived_table_subqueries(sql_query):
+    alias_counter = [1]
+    MAX_ITERATIONS = 50
+    iterations = 0
+
+    # Match FROM or JOIN followed by a subquery that is not aliased
+    pattern = re.compile(
+        r'''
+        (
+            (?:
+                FROM|JOIN|,        # Match FROM, JOIN, or comma
+            )
+            \s*                   # optional whitespace
+            \(                    # opening parenthesis
+                (?:[^()]*         # anything except parentheses
+                |
+                \((?:[^()]*|(?2))*\)  # nested parentheses (recursive)
+                )*
+            \)                    # closing parenthesis
+            \s*                   # optional whitespace
+        )
+        (?!                      # negative lookahead to ensure no alias
+            (AS\s+)?[a-zA-Z_][a-zA-Z0-9_]*\b
+        )
+        ''',
+        re.IGNORECASE | re.VERBOSE | re.DOTALL
+    )
+
+    def alias_replacer(match):
+        matched_subquery = match.group(1)
+        alias = f" AS auto_alias_{alias_counter[0]}"
+        alias_counter[0] += 1
+        return matched_subquery + alias
+
+    previous = None
+    while previous != sql_query and iterations < MAX_ITERATIONS:
+        previous = sql_query
+        sql_query = pattern.sub(alias_replacer, sql_query)
+        iterations += 1
+
+    if iterations == MAX_ITERATIONS:
+        raise RuntimeError("Subquery aliasing exceeded max iterations. Possible infinite loop.")
+
+    return sql_query
