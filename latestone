@@ -1,0 +1,20 @@
+import re
+
+def add_alias_if_missing(query, alias_prefix="alias"):
+    pattern = re.compile(
+        r'(FROM\s*\(\s*[^()]*?\s*\))\s*(?=(WHERE))', re.IGNORECASE
+    )
+    
+    alias_counter = 1
+    def replacer(match):
+        nonlocal alias_counter
+        return f"{match.group(1)} {alias_prefix}{alias_counter} "
+
+    # Replace only when there's no alias (i.e., immediate WHERE after `)`)
+    new_query = pattern.sub(replacer, query)
+    return new_query
+
+# Example usage
+query = "SELECT * FROM (SELECT id FROM table) WHERE id = 1"
+fixed_query = add_alias_if_missing(query)
+print(fixed_query)
