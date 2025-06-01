@@ -1,0 +1,5 @@
+I have a requirement - in my DB2 sql queries i have multiple subqueries which does not have an alias, and multiple subqueries are having the alias. My requirement is to convert the SQL query into SQL sever version where alias to a subquery is mandatory. I cannot use sqlglot or parser, as my target is change the DB2 query to SQL server version, and sqlglot does not support multiple things of DB2 query. 
+
+Now lets come to the query complexity: Queries can be very complex. There can be multiple sub queries, unlimited sub queries, unlimited nested subqueries, subqueries can be within CTEs also, subqueries can be with JOINs, basically every possibility. 
+
+My purpose is to identify the subqueries which does not have an alias, and give an alias to it. If alias is there nothing should be done. The queries can have multiple lines, multiple inline comment statements.
