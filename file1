@@ -1,0 +1,77 @@
+import re
+
+def add_aliases_after_balanced_from_blocks(sql: str) -> str:
+    alias_counter = 1
+    output = sql
+
+    # Scan character-by-character to track matching FROM (...) pairs
+    i = 0
+    while i < len(output):
+        if output[i:i+5].lower() == 'from(' or output[i:i+6].lower() == 'from (':
+            # Found potential start of a FROM subquery
+            from_pos = i + output[i:i+5].lower().find('(') + 1
+            stack = ['(']
+            j = from_pos
+
+            while j < len(output) and stack:
+                if output[j] == '(':
+                    stack.append('(')
+                elif output[j] == ')':
+                    stack.pop()
+                j += 1
+
+            if not stack:
+                closing_paren_pos = j - 1
+                after_text = output[closing_paren_pos + 1:]
+
+                # Find text between this closing ')' and next ')' or end
+                segment_end = len(after_text)
+                next_close = after_text.find(')')
+                if next_close != -1:
+                    segment_end = next_close
+
+                between = after_text[:segment_end].strip()
+                words = re.findall(r'\b\w+\b', between)
+
+                if not (1 <= len(words) <= 2):
+                    # Insert alias at the closing ')'
+                    alias = f" Alias{alias_counter}"
+                    output = output[:closing_paren_pos + 1] + alias + output[closing_paren_pos + 1:]
+                    alias_counter += 1
+                    i = closing_paren_pos + len(alias)  # Move cursor past alias
+                else:
+                    i = closing_paren_pos + 1
+            else:
+                i += 1
+        else:
+            i += 1
+
+    return output
+
+
+# ========== Example usage ==========
+
+if __name__ == "__main__":
+    test_sql = """
+    SELECT * FROM (
+        SELECT * FROM my_table
+    )
+    WHERE field = 'abc';
+
+    SELECT * FROM (
+        SELECT * FROM (
+            SELECT id FROM inner_table
+        )
+    );
+
+    SELECT * FROM (
+        SELECT id FROM inner_table
+    ) x;
+
+    SELECT * FROM (
+        SELECT id FROM something
+    ) extra alias info;
+    """
+
+    result = add_aliases_after_balanced_from_blocks(test_sql)
+    print(result)
