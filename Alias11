@@ -1,0 +1,81 @@
+import re
+
+def add_subquery_aliases(sql: str) -> str:
+    """
+    Adds required aliases to subqueries in DB2 SQL for conversion to SQL Server.
+    Only adds aliases to subqueries that are completely missing them.
+    """
+    # Pattern to identify CTE definitions (to exclude from processing)
+    cte_def_pattern = re.compile(
+        r"""
+        (^WITH\s+|,\s*)[a-zA-Z_][a-zA-Z0-9_]*\s+AS\s*\(  # CTE definition
+            (?:[^()]|(?R))*  # Match anything but parentheses, or recurse
+        \)
+        """,
+        re.IGNORECASE | re.VERBOSE | re.DOTALL | re.MULTILINE
+    )
+    
+    # Pattern to identify subqueries that need aliases
+    subquery_pattern = re.compile(
+        r"""
+        (\(
+            (?:[^()]|(?R))*  # Match anything but parentheses, or recurse
+        \))
+        (?!\s*(?:AS\s+)?[a-zA-Z_][a-zA-Z0-9_]*)  # Negative lookahead for existing alias
+        (?=\s*(?:WHERE|GROUP\s+BY|HAVING|ORDER\s+BY|JOIN|,|\)|$))  # Lookahead for clause end
+        """,
+        re.IGNORECASE | re.VERBOSE | re.DOTALL
+    )
+    
+    # Track used aliases to avoid duplicates
+    used_aliases = set()
+    alias_counter = 1
+    
+    def process_match(match):
+        nonlocal alias_counter
+        
+        # Check if this is actually a SELECT subquery
+        subquery = match.group(1)
+        if not re.search(r'\bselect\b', subquery, re.IGNORECASE | re.DOTALL):
+            return match.group(0)
+        
+        # Check if we're inside a CTE definition (don't add alias to CTE itself)
+        context = sql[:match.start()]
+        if re.search(r'(?:^WITH\s+|,\s*)[a-zA-Z_][a-zA-Z0-9_]*\s+AS\s*$', context, re.IGNORECASE | re.DOTALL | re.MULTILINE):
+            return match.group(0)
+        
+        # Generate a unique alias
+        while True:
+            alias = f"subq{alias_counter}"
+            alias_counter += 1
+            if alias not in used_aliases:
+                used_aliases.add(alias)
+                break
+        
+        return f"{subquery} AS {alias}"
+    
+    # First identify and protect CTE definitions
+    cte_matches = list(cte_def_pattern.finditer(sql))
+    protected_ranges = [(m.start(), m.end()) for m in cte_matches]
+    
+    # Process the SQL in chunks, skipping protected CTE definitions
+    result = []
+    last_pos = 0
+    
+    for start, end in protected_ranges:
+        # Process the part before the CTE
+        part_before = sql[last_pos:start]
+        processed_part = subquery_pattern.sub(process_match, part_before)
+        result.append(processed_part)
+        
+        # Add the CTE definition unchanged
+        result.append(sql[start:end])
+        
+        last_pos = end
+    
+    # Process the remaining part after the last CTE
+    remaining_part = sql[last_pos:]
+    processed_remaining = subquery_pattern.sub(process_match, remaining_part)
+    result.append(processed_remaining)
+    
+    return ''.join(result)
