@@ -1,0 +1,9 @@
+import re
+
+def has_delete_or_truncate(sql: str) -> bool:
+    # Remove quoted strings (single or double) to avoid false positives inside quotes
+    cleaned_sql = re.sub(r"('(?:''|[^'])*'|\"(?:\"\"|[^\"])*\")", '', sql, flags=re.IGNORECASE)
+
+    # Search for DELETE or TRUNCATE as whole words (case-insensitive)
+    pattern = r'\b(delete|truncate)\b'
+    return re.search(pattern, cleaned_sql, flags=re.IGNORECASE) is not None
