@@ -1,0 +1,44 @@
+     def find_subqueries(tokens):
+        subqueries = []
+        for token in tokens:
+            if isinstance(token, sqlparse.sql.Parenthesis):
+                # Check if it contains a SELECT statement
+                for sub_token in token.tokens:
+                    if isinstance(sub_token, sqlparse.sql.IdentifierList):
+                       for id_token in sub_token.tokens:
+                            if isinstance(id_token, sqlparse.sql.Identifier) and id_token.value.upper() == "SELECT":
+                                subqueries.append(token)
+                                break
+                    elif isinstance(sub_token, sqlparse.sql.Identifier) and sub_token.value.upper() == "SELECT":
+                        subqueries.append(token)
+                        break
+        return subqueries
+
+     subqueries = find_subqueries(parsed.tokens)
+
+
+
+
+
+    def modify_subquery(subquery, new_department):
+        for token in subquery.tokens:
+            if isinstance(token, sqlparse.sql.Where):
+                for where_token in token.tokens:
+                    if isinstance(where_token, sqlparse.sql.Comparison):
+                        for comp_token in where_token.tokens:
+                            if isinstance(comp_token, sqlparse.sql.Identifier) and comp_token.value.upper() == "DEPARTMENT":
+                                for next_token in where_token.tokens:
+                                    if isinstance(next_token, sqlparse.sql.Comparison) and next_token.value == '=':
+                                        for value_token in where_token.tokens:
+                                            if isinstance(value_token, sqlparse.sql.String.Single):
+                                                value_token.value = f"'{new_department}'"
+                                                return
+    if subqueries:
+        modify_subquery(subqueries[0], 'Marketing')
+
+
+
+
+
+     modified_sql = str(parsed)
+     print(modified_sql)
