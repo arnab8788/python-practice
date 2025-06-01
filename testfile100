@@ -1,0 +1,21 @@
+import re
+
+def has_to_date_before_to_char(sql: str) -> bool:
+    # Case-insensitive search for first occurrence
+    to_date_match = re.search(r'\bto_date\b', sql, re.IGNORECASE)
+    to_char_match = re.search(r'\bto_char\b', sql, re.IGNORECASE)
+
+    if to_date_match and to_char_match:
+        return to_date_match.start() < to_char_match.start()
+    return False  # One or both functions not present
+
+
+# Example usage
+if __name__ == "__main__":
+    test_sql_1 = "SELECT TO_CHAR(TO_DATE('2024-01-01','YYYY-MM-DD'), 'MM/DD/YYYY') FROM dual;"
+    test_sql_2 = "SELECT TO_DATE('2024-01-01','YYYY-MM-DD') FROM table;"
+    test_sql_3 = "SELECT TO_CHAR(sysdate, 'MM/DD/YYYY') FROM table;"
+
+    print("Test 1:", has_to_date_before_to_char(test_sql_1))  # True
+    print("Test 2:", has_to_date_before_to_char(test_sql_2))  # False
+    print("Test 3:", has_to_date_before_to_char(test_sql_3))  # False
