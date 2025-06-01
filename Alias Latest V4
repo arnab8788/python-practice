@@ -1,0 +1,51 @@
+import re
+
+def add_aliases_to_subqueries(sql: str) -> str:
+    """
+    Adds missing aliases to subqueries in a SQL string.
+    Skips aliasing for already aliased subqueries and CTEs.
+    """
+
+    alias_counter = 1
+
+    # Pattern explanation:
+    # - Match subqueries like "(SELECT ...)" not followed by alias
+    # - Avoid false positives like CTEs
+    pattern = re.compile(r"""
+        (?<!\w)                    # Ensure no word character before '('
+        (\(                        # Match an open parenthesis
+        \s*select\b                # Start with SELECT keyword
+        .*?                       # Non-greedy match of the subquery body
+        \))                       # Closing parenthesis
+        (?!\s*(as\s+\w+|\w))      # Not already followed by alias
+        (?=\s*(where|join|group|order|union|having|,|\)|$))  # Lookahead for SQL clauses or end
+    """, re.IGNORECASE | re.DOTALL | re.VERBOSE)
+
+    def replacer(match):
+        nonlocal alias_counter
+        subquery = match.group(1)
+        replacement = f"{subquery} as AutoAlias{alias_counter}"
+        alias_counter += 1
+        return replacement
+
+    prev_sql = ""
+    while prev_sql != sql:  # Repeat until no changes
+        prev_sql = sql
+        sql = pattern.sub(replacer, sql, count=1)
+
+    return sql
+
+
+# Example usage:
+if __name__ == "__main__":
+    raw_sql = """
+    SELECT * FROM (
+        SELECT * FROM (
+            SELECT * FROM (SELECT * FROM Table)
+        ) as T2
+    )
+    """
+
+    transformed_sql = add_aliases_to_subqueries(raw_sql)
+    print("Transformed SQL:")
+    print(transformed_sql)
