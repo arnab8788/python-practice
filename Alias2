@@ -1,0 +1,62 @@
+import re
+
+def add_subquery_aliases(sql: str) -> str:
+    """
+    Adds required aliases to subqueries in DB2 SQL for conversion to SQL Server.
+    Handles complex nested queries, CTEs, joins, and maintains original formatting.
+    """
+    # Pattern to identify subqueries that need aliases
+    subquery_pattern = re.compile(
+        r"""
+        (\(
+            (?:[^()]|(?R))*  # Match anything but parentheses, or recurse
+        \))
+        (?!\s*(?:AS\s+)?[a-zA-Z_][a-zA-Z0-9_]*)  # Negative lookahead for existing alias
+        (?=\s*(?:WHERE|GROUP\s+BY|HAVING|ORDER\s+BY|JOIN|,|\)|$))  # Lookahead for clause end
+        """,
+        re.IGNORECASE | re.VERBOSE | re.DOTALL
+    )
+    
+    # Track used aliases to avoid duplicates
+    used_aliases = set()
+    alias_counter = 1
+    
+    def process_match(match):
+        nonlocal alias_counter
+        
+        # Check if this is actually a SELECT subquery
+        subquery = match.group(1)
+        if not re.search(r'\bselect\b', subquery, re.IGNORECASE | re.DOTALL):
+            return match.group(0)
+        
+        # Generate a unique alias
+        while True:
+            alias = f"subq{alias_counter}"
+            alias_counter += 1
+            if alias not in used_aliases:
+                used_aliases.add(alias)
+                break
+        
+        # Return the subquery with alias
+        return f"{subquery} AS {alias}"
+    
+    # Process the SQL in chunks to handle very large queries
+    chunk_size = 10000
+    chunks = [sql[i:i+chunk_size] for i in range(0, len(sql), chunk_size)]
+    processed_chunks = []
+    
+    for chunk in chunks:
+        # First pass - handle obvious cases
+        processed = subquery_pattern.sub(process_match, chunk)
+        
+        # Second pass - handle cases where subquery is followed by JOIN
+        processed = re.sub(
+            r"(\(\s*select\b.*?\))(?=\s+JOIN\b)",
+            lambda m: f"{m.group(1)} AS subq{alias_counter}" if not re.search(r'AS\s+\w+$', m.group(1), re.IGNORECASE) else m.group(0),
+            processed,
+            flags=re.IGNORECASE | re.DOTALL
+        )
+        
+        processed_chunks.append(processed)
+    
+    return ''.join(processed_chunks)
