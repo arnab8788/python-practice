@@ -1,0 +1,71 @@
+# Update the script logic to handle cases where WHERE or JOIN or other clauses follow a subquery without alias
+
+def add_aliases_to_subqueries_robust(sql: str) -> str:
+    """
+    Add missing aliases to subqueries in SQL for SQL Server compatibility.
+    This version handles subqueries followed by WHERE, JOIN, etc.
+    """
+
+    alias_counter = 1
+    result = ""
+    index = 0
+
+    def find_matching_paren(sql: str, start: int) -> int:
+        """
+        Find the position of the matching closing parenthesis.
+        """
+        depth = 0
+        for i in range(start, len(sql)):
+            if sql[i] == '(':
+                depth += 1
+            elif sql[i] == ')':
+                depth -= 1
+                if depth == 0:
+                    return i
+        return -1
+
+    while index < len(sql):
+        match = re.search(r"\(\s*SELECT\b", sql[index:], re.IGNORECASE)
+        if not match:
+            result += sql[index:]
+            break
+
+        start = index + match.start()
+        result += sql[index:start]
+        end = find_matching_paren(sql, start)
+
+        if end == -1:
+            result += sql[start:]
+            break
+
+        subquery = sql[start:end + 1]
+        following_index = end + 1
+        following_text = sql[following_index:following_index + 100].strip()
+
+        # Check if alias follows subquery directly or after keywords like WHERE, JOIN, etc.
+        alias_match = re.match(
+            r"^(AS\s+)?[a-zA-Z_][\w]*|^(WHERE|JOIN|ON|GROUP\s+BY|ORDER\s+BY|INNER\s+JOIN|LEFT\s+JOIN|RIGHT\s+JOIN|WITH|UNION|FROM)\b",
+            following_text,
+            re.IGNORECASE
+        )
+
+        if not alias_match or alias_match.group(1) is None:
+            alias = f" as AutoAlias{alias_counter}"
+            alias_counter += 1
+            subquery += alias
+
+        result += subquery
+        index = end + 1
+
+    return result
+
+
+# Apply the enhanced transformation
+transformed_sql_v2 = add_aliases_to_subqueries_robust(content)
+
+# Save to output file
+output_path_v2 = "/mnt/data/Transformed_SQL_with_Aliases_v2.sql"
+with open(output_path_v2, "w") as f:
+    f.write(transformed_sql_v2)
+
+output_path_v2
