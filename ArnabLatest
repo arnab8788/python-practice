@@ -1,0 +1,74 @@
+import re
+
+def add_aliases_to_from_blocks(sql: str) -> str:
+    alias_counter = 1
+    output = sql
+
+    # Regular expression to find patterns like FROM ( ... ) where alias might be missing
+    pattern = re.compile(r"""
+        from\s*\(             # 'FROM (' part (non-greedy)
+        (.*?)                 # Group 1: content inside ( ... )
+        \)                   # closing parenthesis
+        ([ \t\n\r\f\v]*?)     # Group 2: whitespace or text after ')'
+        (?=\bwhere\b|\bjoin\b|\bon\b|\border\b|\bgroup\b|\bunion\b|\bhaving\b|,|\)|$)
+    """, re.IGNORECASE | re.DOTALL | re.VERBOSE)
+
+    def is_balanced(text):
+        return text.count('(') == text.count(')')
+
+    def is_valid_alias_part(text):
+        """Checks if there's 1–2 non-WHERE words after ')'"""
+        clean = text.strip().replace('\n', ' ')
+        words = re.findall(r'\b\w+\b', clean)
+        if not words:
+            return False
+        return 1 <= len(words) <= 2 and all(w.lower() != 'where' for w in words)
+
+    def replacer(match):
+        nonlocal alias_counter
+        inside = match.group(1)
+        after = match.group(2)
+
+        if not is_balanced(inside):
+            return match.group(0)  # Not a balanced subquery
+
+        if is_valid_alias_part(after):
+            return match.group(0)  # Already has alias
+
+        return f"FROM ({inside}) Alias{alias_counter}"  # Add alias
+        alias_counter += 1
+
+    prev_output = None
+    while prev_output != output:
+        prev_output = output
+        output = pattern.sub(replacer, output, count=1)
+        alias_counter += 1
+
+    return output
+
+
+# ========== Example usage ==========
+
+if __name__ == "__main__":
+    test_sql = """
+    SELECT * FROM (
+        SELECT * FROM my_table
+    )
+    WHERE status = 'A';
+
+    SELECT * FROM (
+        SELECT id FROM (
+            SELECT id FROM inner_table
+        )
+    );
+
+    SELECT * FROM (
+        SELECT id FROM (
+            SELECT id FROM some_table
+        ) inner_alias
+    )
+    WHERE id > 10;
+    """
+
+    result = add_aliases_to_from_blocks(test_sql)
+    print(result)
