@@ -1,0 +1,33 @@
+import sqlglot
+from sqlglot import parse_one, exp
+
+def add_missing_aliases(sql):
+    tree = parse_one(sql)
+    
+    def walk(expr):
+        for child in expr.args.values():
+            if isinstance(child, exp.Subquery) and not child.alias:
+                alias_name = f"auto_alias"
+                child.set("alias", exp.TableAlias(this=exp.to_identifier(alias_name)))
+            if isinstance(child, exp.Expression):
+                walk(child)
+            elif isinstance(child, list):
+                for item in child:
+                    if isinstance(item, exp.Expression):
+                        walk(item)
+
+    walk(tree)
+    return tree.sql()
+
+# Example
+sql = """
+WITH H1 AS (
+    SELECT * FROM (
+        SELECT * FROM table1
+    )
+    WHERE RNO = 1
+)
+SELECT * FROM H1
+"""
+
+print(add_missing_aliases(sql))
