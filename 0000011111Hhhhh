@@ -1,0 +1,106 @@
+import re
+
+def fix_sql_aliasing(sql: str) -> str:
+    """
+    Adds missing aliases to all subqueries containing SELECT,
+    except top-level CTEs. Subqueries inside CTEs are processed.
+    """
+    alias_counter = 1
+    output = sql
+
+    # Step 1: Identify top-level CTE ranges to skip aliasing them
+    cte_ranges = []
+    cte_pattern = re.compile(r"WITH\s+(.*?)\s+AS\s*\(", re.IGNORECASE | re.DOTALL)
+    for match in cte_pattern.finditer(output):
+        start = match.start()
+        stack = ['(']
+        i = match.end()
+        while i < len(output) and stack:
+            if output[i] == '(':
+                stack.append('(')
+            elif output[i] == ')':
+                stack.pop()
+            i += 1
+        cte_ranges.append((start, i))
+
+    def is_within_cte_top(pos):
+        return any(start <= pos <= end for start, end in cte_ranges)
+
+    # Step 2: Add aliases to subqueries not already aliased
+    subquery_pattern = re.compile(r"""
+        (?<![\w])                    # Not preceded by word char
+        (\(                          # Group 1: Start of subquery
+        \s*select\b                  # SELECT keyword
+        .*?                         # Non-greedy content
+        \))                         # End parenthesis
+        (?!\s*(as\s+\w+|\w))         # Not followed by alias
+        (?=\s*(where|join|group|order|union|having|,|\)|$))  # Followed by clause
+    """, re.IGNORECASE | re.DOTALL | re.VERBOSE)
+
+    def subquery_replacer(match):
+        nonlocal alias_counter
+        start = match.start(1)
+        if is_within_cte_top(start):
+            return match.group(0)
+        subquery = match.group(1)
+        alias = f" as AutoAlias{alias_counter}"
+        alias_counter += 1
+        return f"{subquery}{alias}"
+
+    prev_output = None
+    while prev_output != output:
+        prev_output = output
+        output = subquery_pattern.sub(subquery_replacer, output, count=1)
+
+    return output
+
+
+def add_aliases_before_where(sql: str) -> str:
+    """
+    Adds an alias between `)` and `WHERE` if there are not 1–2 words in between.
+    """
+    alias_counter = 1
+
+    pattern = re.compile(r"""
+        (\))                          # Group 1: closing parenthesis
+        ([^;]*?)                      # Group 2: between ) and WHERE
+        (\bwhere\b)                   # Group 3: WHERE clause
+    """, re.IGNORECASE | re.DOTALL | re.VERBOSE)
+
+    def alias_in_between(text):
+        clean = text.strip().replace('\n', ' ')
+        words = re.findall(r'\b\w+\b', clean)
+        return 1 <= len(words) <= 2
+
+    def where_replacer(match):
+        nonlocal alias_counter
+        closing, middle, where = match.groups()
+        if alias_in_between(middle):
+            return match.group(0)
+        alias = f" T{alias_counter}"
+        alias_counter += 1
+        return f"{closing}{alias}{middle}{where}"
+
+    return pattern.sub(where_replacer, sql)
+
+
+# ========== Run Both Fixes ==========
+
+def process_sql_query(sql: str) -> str:
+    sql = fix_sql_aliasing(sql)
+    sql = add_aliases_before_where(sql)
+    return sql
+
+
+# ========== Example Usage ==========
+
+if __name__ == "__main__":
+    with open("input.sql", "r", encoding="utf-8") as infile:
+        input_sql = infile.read()
+
+    fixed_sql = process_sql_query(input_sql)
+
+    with open("output.sql", "w", encoding="utf-8") as outfile:
+        outfile.write(fixed_sql)
+
+    print("✅ SQL processed and saved to 'output.sql'")
