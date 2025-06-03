@@ -1,0 +1,46 @@
+import regex
+
+# Sample DB2 SQL with various formatting
+sql = """
+SELECT 
+    TO_DATE
+    (
+        '2021-01-01',
+        'YYYY-MM-DD'
+    ) AS dt1,
+
+    TO_DATE(TO_CHAR(order_date, 'YYYY-MM-DD'), 'YYYY-MM-DD') AS dt2,
+
+    TO_DATE(
+        TO_DATE(
+            some_field,
+            'YYYY-MM-DD'
+        ),
+        'YYYY-MM-DD'
+    ) AS dt3
+
+FROM orders;
+"""
+
+# Recursive regex that allows multiline, spacing, and nested TO_DATE
+pattern = r'\bTO_DATE\s*\(\s*((?:[^()]+|(?R))*?)\s*\)'
+
+# Function to convert TO_DATE's content to SQL Server syntax
+def convert_to_sqlserver(to_date_match):
+    args_str = to_date_match.group(1)
+
+    # Split top-level commas only
+    parts = [p.strip() for p in regex.split(r',(?![^(]*\))', args_str)]
+    
+    if len(parts) >= 1:
+        expr = parts[0]
+        return f"CAST({expr} AS DATETIME)"
+    
+    # Fallback if something goes wrong
+    return f"CAST({args_str} AS DATETIME)"
+
+# Perform replacement in-place while preserving query formatting
+converted_sql = regex.sub(pattern, convert_to_sqlserver, sql, flags=regex.IGNORECASE | regex.DOTALL)
+
+print("🔁 Converted SQL Query:\n")
+print(converted_sql)
